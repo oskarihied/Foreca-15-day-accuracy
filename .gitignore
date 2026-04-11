@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+
+.claude/
+
+# HTTP response cache — large, regenerable from Wayback + Open-Meteo.
+# Generated summary CSVs are kept so the repo is useful without a rerun.
+cache/https___*
+cache/http___*
+cache/web.archive.org_*
