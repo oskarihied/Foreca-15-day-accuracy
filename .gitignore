@@ -8,3 +8,4 @@ __pycache__/
 cache/https___*
 cache/http___*
 cache/web.archive.org_*
+cache/live_foreca_*.html

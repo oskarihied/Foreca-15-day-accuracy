@@ -42,6 +42,8 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent
 CACHE = ROOT / "cache"
 CACHE.mkdir(exist_ok=True)
+GRAPHS = ROOT / "graphs"
+GRAPHS.mkdir(exist_ok=True)
 
 FORECA_URL = "https://www.foreca.fi/Finland/Helsinki/15vrk"
 
@@ -651,14 +653,15 @@ def main() -> None:
         "pod", "far", "csi", "cov_precip_range",
     ]].to_string(index=False, float_format=fmt))
 
-    plot_error_vs_lead(summary, ROOT / "mae_vs_lead.png")
-    plot_skill(summary, ROOT / "skill_vs_lead.png")
-    plot_interval_coverage(cov, ROOT / "interval_coverage.png")
-    plot_interval_widths(cov, ROOT / "interval_widths.png")
-    plot_precipitation(psum, ROOT / "precipitation.png")
+    plot_error_vs_lead(summary, GRAPHS / "mae_vs_lead.png")
+    plot_skill(summary, GRAPHS / "skill_vs_lead.png")
+    plot_interval_coverage(cov, GRAPHS / "interval_coverage.png")
+    plot_interval_widths(cov, GRAPHS / "interval_widths.png")
+    plot_precipitation(psum, GRAPHS / "precipitation.png")
     print()
-    print("wrote mae_vs_lead.png, skill_vs_lead.png, interval_coverage.png, "
-          "interval_widths.png, precipitation.png")
+    print("wrote graphs/mae_vs_lead.png, graphs/skill_vs_lead.png, "
+          "graphs/interval_coverage.png, graphs/interval_widths.png, "
+          "graphs/precipitation.png")
 
 
 if __name__ == "__main__":
