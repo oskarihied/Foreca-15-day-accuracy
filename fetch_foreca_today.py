@@ -15,6 +15,7 @@ Usage:
 
 from __future__ import annotations
 
+import math
 import sys
 import urllib.request
 from datetime import date
@@ -107,7 +108,7 @@ def main() -> None:
     print(f"  {'Lead':>4}  {'Date':>10}  {'Tmax':>6}  {'Tmin':>6}  {'mm (rd)':>8}  {'range':>12}")
     print(f"  {'----':>4}  {'----------':>10}  {'------':>6}  {'------':>6}  {'--------':>8}  {'------------':>12}")
     for r in rows:
-        rd_str = f"{r.rd:5.1f}" if r.rd == r.rd else "  n/a"  # NaN check
+        rd_str = f"{r.rd:5.1f}" if not math.isnan(r.rd) else "  n/a"
         print(
             f"  {r.lead:>4}  {r.target_date.strftime('%Y-%m-%d'):>10}"
             f"  {r.tmedmax:>+6.1f}  {r.tmedmin:>+6.1f}"

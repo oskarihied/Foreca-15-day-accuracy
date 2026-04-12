@@ -183,10 +183,10 @@ def _parse_cpc_daily(text: str, name: str) -> pd.DataFrame:
     return df
 
 
-def fetch_teleconnections() -> pd.DataFrame:
+def fetch_teleconnections(*, max_age: float | None = None) -> pd.DataFrame:
     """Daily NAO and AO indices from NOAA CPC."""
-    nao = _parse_cpc_daily(http_get(NAO_URL), "nao")
-    ao = _parse_cpc_daily(http_get(AO_URL), "ao")
+    nao = _parse_cpc_daily(http_get(NAO_URL, max_age=max_age), "nao")
+    ao = _parse_cpc_daily(http_get(AO_URL, max_age=max_age), "ao")
     return (
         nao.merge(ao, on="date", how="outer")
         .sort_values("date")

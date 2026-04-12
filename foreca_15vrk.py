@@ -28,8 +28,6 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Iterable
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -54,7 +52,7 @@ HELSINKI_LAT, HELSINKI_LON = 60.1699, 24.9384
 # We need observations from somewhat before the earliest snapshot so that the
 # climatology baseline always has prior years to average over.
 OBS_START = "2010-01-01"
-OBS_END = "2025-12-31"
+OBS_END = f"{date.today().year}-12-31"
 
 USER_AGENT = "foreca-15vrk-research/0.1 (+educational comparison study)"
 
@@ -69,11 +67,17 @@ def _cache_key(url: str) -> Path:
         safe = safe[:80] + "__" + safe[-80:]
     return CACHE / safe
 
-def http_get(url: str, *, retries: int = 3, sleep: float = 1.5) -> str:
-    """GET with gzip handling, disk cache, and polite retry/backoff."""
+def http_get(url: str, *, retries: int = 3, sleep: float = 1.5,
+             max_age: float | None = None) -> str:
+    """GET with gzip handling, disk cache, and polite retry/backoff.
+
+    max_age: if set, re-fetch when the cached file is older than this
+             many seconds.  None (default) = cache forever.
+    """
     key = _cache_key(url)
     if key.exists():
-        return key.read_text(encoding="utf-8")
+        if max_age is None or (time.time() - key.stat().st_mtime) < max_age:
+            return key.read_text(encoding="utf-8")
     last_err: Exception | None = None
     for attempt in range(retries):
         try:
@@ -106,7 +110,7 @@ def list_snapshots() -> list[dict]:
     cdx_url = (
         "http://web.archive.org/cdx/search/cdx"
         "?url=foreca.fi/Finland/Helsinki/15vrk"
-        "&output=json&from=2015&to=2025"
+        f"&output=json&from=2015&to={date.today().year}"
         "&filter=statuscode:200"
         "&collapse=timestamp:8"  # one per day at most
     )
@@ -236,7 +240,7 @@ def forecast_to_rows(
     return rows
 
 
-def harvest_forecasts(snapshots: Iterable[dict]) -> pd.DataFrame:
+def harvest_forecasts(snapshots: list[dict]) -> pd.DataFrame:
     all_rows: list[ForecastRow] = []
     skipped = 0
     for snap in snapshots:
@@ -248,7 +252,7 @@ def harvest_forecasts(snapshots: Iterable[dict]) -> pd.DataFrame:
             continue
         all_rows.extend(forecast_to_rows(run_date, entries))
     print(f"harvested {len(all_rows)} forecast rows from "
-          f"{sum(1 for _ in snapshots) - skipped} snapshots "
+          f"{len(snapshots) - skipped} snapshots "
           f"({skipped} skipped)")
     return pd.DataFrame([r.__dict__ for r in all_rows])
 
@@ -268,12 +272,11 @@ def fetch_observations(start: str = OBS_START, end: str = OBS_END) -> pd.DataFra
     data = json.loads(http_get(url))
     daily = data["daily"]
     df = pd.DataFrame({
-        "date": pd.to_datetime(daily["time"]).date,
+        "date": pd.to_datetime(daily["time"]),
         "obs_tmax": daily["temperature_2m_max"],
         "obs_tmin": daily["temperature_2m_min"],
         "obs_precip": daily["precipitation_sum"],
     })
-    df["date"] = pd.to_datetime(df["date"])
     return df
 
 
@@ -291,28 +294,59 @@ def climatology_lookup(obs: pd.DataFrame) -> pd.DataFrame:
     day-of-year (rain defined as precip > 0.2 mm). This serves as a rain/no-
     rain climatological baseline.
     """
-    obs = obs.copy()
+    obs = obs.copy().sort_values("date").reset_index(drop=True)
     obs["doy"] = obs["date"].dt.dayofyear
     obs["year"] = obs["date"].dt.year
-    out_rows = []
-    obs_sorted = obs.sort_values("date").reset_index(drop=True)
-    for _, row in obs_sorted.iterrows():
-        d: pd.Timestamp = row["date"]
-        window_doys = {((d.dayofyear - 1 + k) % 365) + 1 for k in range(-3, 4)}
-        prior = obs_sorted[
-            (obs_sorted["year"] < d.year) & (obs_sorted["doy"].isin(window_doys))
-        ]
-        if len(prior) == 0:
-            out_rows.append((d, np.nan, np.nan, np.nan, np.nan))
-        else:
-            p = prior["obs_precip"]
-            out_rows.append((
-                d,
-                prior["obs_tmax"].mean(),
-                prior["obs_tmin"].mean(),
-                p.mean(),
-                (p > 0.2).mean(),
-            ))
+    obs["_rain"] = (obs["obs_precip"] > 0.2).astype(float)
+
+    # Pre-aggregate per (year, doy) for fast incremental accumulation.
+    agg = obs.groupby(["year", "doy"]).agg(
+        _tx_s=("obs_tmax", "sum"),   _tx_n=("obs_tmax", "count"),
+        _tn_s=("obs_tmin", "sum"),   _tn_n=("obs_tmin", "count"),
+        _pr_s=("obs_precip", "sum"), _pr_n=("obs_precip", "count"),
+        _rn_s=("_rain", "sum"),
+    )
+    yd = {idx: tuple(row) for idx, row in agg.iterrows()}
+
+    years = sorted(obs["year"].unique())
+    # cum[doy] accumulates [tx_sum, tx_n, tn_sum, tn_n, pr_sum, pr_n, rain_sum]
+    cum: dict[int, list[float]] = {}
+    out_rows: list[tuple] = []
+
+    for year in years:
+        year_data = obs.loc[obs["year"] == year, ["date", "doy"]]
+        for row in year_data.itertuples(index=False):
+            center = row.doy
+            tx_s = tx_n = tn_s = tn_n = pr_s = pr_n = rn_s = 0.0
+            for k in range(-3, 4):
+                wd = ((center - 1 + k) % 365) + 1
+                if wd in cum:
+                    c = cum[wd]
+                    tx_s += c[0]; tx_n += c[1]
+                    tn_s += c[2]; tn_n += c[3]
+                    pr_s += c[4]; pr_n += c[5]
+                    rn_s += c[6]
+            if tx_n == 0:
+                out_rows.append((row.date, np.nan, np.nan, np.nan, np.nan))
+            else:
+                out_rows.append((
+                    row.date,
+                    tx_s / tx_n,
+                    tn_s / tn_n if tn_n else np.nan,
+                    pr_s / pr_n if pr_n else np.nan,
+                    rn_s / pr_n if pr_n else np.nan,
+                ))
+
+        # Fold this year into the cumulative doy buckets
+        for doy_val in range(1, 367):
+            key = (year, doy_val)
+            if key in yd:
+                v = yd[key]
+                if doy_val not in cum:
+                    cum[doy_val] = [0.0] * 7
+                for i in range(7):
+                    cum[doy_val][i] += v[i]
+
     return pd.DataFrame(
         out_rows,
         columns=["date", "clim_tmax", "clim_tmin", "clim_precip", "clim_prain"],
@@ -403,8 +437,8 @@ def summarise_by_lead(m: pd.DataFrame) -> pd.DataFrame:
         })
     out = pd.DataFrame(rows).sort_values("lead").reset_index(drop=True)
     # Murphy skill score vs climatology, per variable.
-    out["skill_tmax"] = 1 - (out["fc_mae_tmax"] / out["cl_mae_tmax"])
-    out["skill_tmin"] = 1 - (out["fc_mae_tmin"] / out["cl_mae_tmin"])
+    out["skill_tmax"] = 1 - (out["fc_mae_tmax"] / out["cl_mae_tmax"].replace(0, np.nan))
+    out["skill_tmin"] = 1 - (out["fc_mae_tmin"] / out["cl_mae_tmin"].replace(0, np.nan))
     return out
 
 

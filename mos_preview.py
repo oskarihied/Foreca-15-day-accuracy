@@ -123,7 +123,7 @@ def _forecast_api_daily(
         f"&past_days={_FORECAST_PAST_DAYS}"
         f"&forecast_days=7"
     )
-    data = json.loads(http_get(url))
+    data = json.loads(http_get(url, max_age=12 * 3600))
     daily = data["daily"]
     df = pd.DataFrame({"date": pd.to_datetime(daily["time"])})
     for k in variables:
@@ -451,7 +451,7 @@ def main() -> None:
     extra_ext = _extend_extra(extra_base)
     nearby_base = fetch_nearby()
     nearby_ext = _extend_nearby(nearby_base)
-    telec = fetch_teleconnections()  # always current
+    telec = fetch_teleconnections(max_age=12 * 3600)
     clim_ext = _extend_clim(clim, obs_ext)
     print(f"       obs extended to {obs_ext['date'].max().date()}")
 

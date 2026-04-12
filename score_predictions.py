@@ -11,6 +11,9 @@ Usage:
 
 from __future__ import annotations
 
+import json
+import urllib.request
+from datetime import date
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -26,6 +29,43 @@ HISTORY_CSV = CACHE / "mos_preview_history.csv"
 OBS_CSV = CACHE / "observations.csv"
 
 
+def _extend_observations(obs: pd.DataFrame) -> pd.DataFrame:
+    """Extend observations to ~today via Open-Meteo forecast API (past_days)."""
+    today = pd.Timestamp(date.today())
+    if obs["date"].max() >= today - pd.Timedelta(days=1):
+        return obs
+    url = (
+        "https://api.open-meteo.com/v1/forecast"
+        "?latitude=60.1699&longitude=24.9384"
+        "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
+        "&timezone=Europe%2FHelsinki"
+        "&past_days=92&forecast_days=1"
+    )
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "foreca-15vrk-research/0.1"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as err:
+        print(f"  WARNING: could not fetch recent observations: {err}")
+        return obs
+    daily = data["daily"]
+    bridge = pd.DataFrame({
+        "date": pd.to_datetime(daily["time"]),
+        "obs_tmax": daily["temperature_2m_max"],
+        "obs_tmin": daily["temperature_2m_min"],
+        "obs_precip": daily["precipitation_sum"],
+    })
+    bridge = bridge[bridge["date"] <= today]
+    return (
+        pd.concat([obs, bridge], ignore_index=True)
+        .drop_duplicates(subset=["date"])
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
+
+
 def load_scored() -> pd.DataFrame:
     if not HISTORY_CSV.exists():
         raise FileNotFoundError(
@@ -37,7 +77,7 @@ def load_scored() -> pd.DataFrame:
         )
 
     hist = pd.read_csv(HISTORY_CSV, parse_dates=["run_date", "target_date"])
-    obs  = pd.read_csv(OBS_CSV, parse_dates=["date"])
+    obs  = _extend_observations(pd.read_csv(OBS_CSV, parse_dates=["date"]))
 
     scored = hist.merge(
         obs.rename(columns={"date": "target_date"}),

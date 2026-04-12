@@ -182,14 +182,16 @@ Two models, both `HistGradientBoostingRegressor` from scikit-learn:
 Restricting to the 32 Foreca snapshots in 2021–2025, all three approaches
 head-to-head (standalone ML, raw Foreca, and MOS-corrected Foreca):
 
-- **Foreca wins handily at leads 2–7** (it has access to global NWP).
 - **Standalone ML matches Foreca at lead 1** for Tmax (1.41 vs 1.43 °C).
+- **Raw Foreca beats standalone ML at leads 2–7** — it has access to
+  global NWP; a model trained on lagged local observations cannot compete.
+- **MOS beats raw Foreca at leads 2–10**, so Foreca's mid-range advantage
+  over standalone ML largely disappears once the bias correction is applied.
+  At leads 4–10 the correction is largest; see the bar chart below for the
+  per-lead breakdown.
 - **Standalone ML beats Foreca from lead ~8 onwards** for both Tmax and
   Tmin — exactly the regime where Foreca has already collapsed to
   climatology.
-- **MOS consistently beats raw Foreca** on this subset across most leads.
-  At leads 4–10 the correction is largest; see the bar chart below for
-  the per-lead breakdown.
 - **Foreca wins on precipitation at every lead**, with or without MOS.
   A point GBM trained on lagged station data is not a competitive
   precipitation forecaster, and the MOS correction makes things slightly
