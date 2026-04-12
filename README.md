@@ -144,11 +144,11 @@ complete in a few seconds.
 
 ## ML baseline — can a small model beat Foreca?
 
-[ml_forecast.py](ml_forecast.py) is a follow-up that asks: what if instead
-of comparing Foreca to climatology, we trained a simple gradient-boosting
-model on past observations and compared **that** to Foreca?
+[ml_forecast.py](ml_forecast.py) asks: what if instead of comparing Foreca
+to a day-of-year climatology, we trained a simple gradient-boosting model
+on past observations — and also tried to *correct* Foreca with ML?
 
-Two heads, both `HistGradientBoostingRegressor` from scikit-learn:
+Two models, both `HistGradientBoostingRegressor` from scikit-learn:
 
 - **Standalone** — trained on 2011–2020 ERA5 daily observations only,
   tested on 2021–2025. Features: Tmax/Tmin/precip lags 0–7 days, lagged
@@ -157,11 +157,11 @@ Two heads, both `HistGradientBoostingRegressor` from scikit-learn:
   Stockholm / Tallinn / St Petersburg, and daily NAO / AO indices from
   NOAA CPC. One model per (variable, lead) — 42 in total. Foreca is
   **not** an input.
-- **MOS post-processor** — trained on the merged Foreca rows (~1000
-  examples, run_date < 2023) with Foreca's own published forecast as an
-  input feature on top of all the standalone features. Tested on
-  snapshots with run_date ≥ 2023. One model per variable, with `lead`
-  as a feature so a single model spans all leads.
+- **MOS (Model Output Statistics) post-processor** — takes Foreca's own
+  published forecast as an additional input feature and learns a bias
+  correction. Trained on Foreca snapshots with run_date < 2023, tested on
+  snapshots with run_date ≥ 2023. One model per variable with `lead` as a
+  feature so a single model spans all leads.
 
 ### Standalone results (full 2021–2025 test set)
 
@@ -175,48 +175,51 @@ Two heads, both `HistGradientBoostingRegressor` from scikit-learn:
   climatology — adding lag features, NAO/AO, and nearby cities does not
   push the useful horizon meaningfully past where pure persistence dies.
 
-### Standalone vs. Foreca on the snapshot subset
+### Three-way comparison on Foreca snapshots
 
-![ML vs Foreca temperature](graphs/ml_mae_vs_lead.png)
+![ML vs Foreca vs MOS](graphs/ml_mae_vs_lead.png)
 
-The same 32 Foreca snapshots in 2021–2025, head-to-head:
+Restricting to the 32 Foreca snapshots in 2021–2025, all three approaches
+head-to-head (standalone ML, raw Foreca, and MOS-corrected Foreca):
 
 - **Foreca wins handily at leads 2–7** (it has access to global NWP).
-- **ML matches Foreca at lead 1** for Tmax (1.41 vs 1.43 °C).
-- **ML beats Foreca from lead ~8 onwards** for both Tmax and Tmin —
-  exactly the regime where Foreca had already collapsed to climatology.
-  This is consistent with the original finding that Foreca's last 5
-  days carry no information beyond climatology.
-- **Foreca wins on precipitation at every lead**. A point gradient-
-  boosting model trained on lagged station data is not a competitive
-  precipitation forecaster.
+- **Standalone ML matches Foreca at lead 1** for Tmax (1.41 vs 1.43 °C).
+- **Standalone ML beats Foreca from lead ~8 onwards** for both Tmax and
+  Tmin — exactly the regime where Foreca has already collapsed to
+  climatology.
+- **MOS consistently beats raw Foreca** on this subset across most leads.
+  At leads 4–10 the correction is largest; see the bar chart below for
+  the per-lead breakdown.
+- **Foreca wins on precipitation at every lead**, with or without MOS.
+  A point GBM trained on lagged station data is not a competitive
+  precipitation forecaster, and the MOS correction makes things slightly
+  worse (small training sample, highly skewed target).
 
-### MOS post-processor — can ML correct Foreca?
+### MOS improvement over raw Foreca
 
 ![MOS improvement](graphs/ml_mos_improvement.png)
 
-Bars show MOS MAE *minus* raw Foreca MAE on the same rows; green = MOS
-helps, red = MOS hurts.
+Bars show MOS MAE *minus* raw Foreca MAE on the same test snapshots;
+negative (green) = MOS helps, positive (red) = MOS hurts.
 
 - **Tmax / Tmin: clear win at most leads.** The largest gains are at
   leads 4–10, where MOS shaves 0.2–1.2 °C off Foreca's MAE. This is the
   classical operational story — gradient-boosting bias correction adds
-  real skill to a physics-based forecast.
-- **Precipitation: MOS mostly hurts.** With ~1000 training rows and a
-  highly skewed target, the MOS model overcorrects Foreca's precip
-  point forecast at most leads. This is a sample-size problem more than
-  a method problem.
+  real skill on top of a physics-based NWP forecast.
+- **Precipitation: MOS mostly hurts.** With only ~1000 training rows and
+  a highly skewed target, the MOS model overcorrects Foreca's precip
+  point forecast at most leads.
 - **Caveat**: only 24 test snapshots, so per-lead numbers are noisy.
   Treat individual bars as suggestive, not significant.
 
 ### Headline takeaway
 
-For a single-file ~600-line script with no NWP and no GPU:
+For a single-file script with no NWP and no GPU:
 
 | Question | Answer |
 |---|---|
 | Beat climatology at every lead? | **Tmax / Tmin yes, out to ~lead 7.** Precip barely. |
-| Beat Foreca at long leads (≥10)? | **Yes, on the small snapshot subset** — ML's bias toward climatology *is* the right answer once Foreca's signal has decayed. |
+| Beat Foreca at long leads (≥10)? | **Yes** — ML's bias toward climatology *is* the right answer once Foreca's signal has decayed. |
 | Improve Foreca at intermediate leads via MOS? | **Yes for temperature, no for precip.** Temperature MOS is the most useful artifact in this directory. |
 
 ### Running the ML baseline
