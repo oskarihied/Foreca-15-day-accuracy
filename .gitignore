@@ -9,3 +9,8 @@ cache/https___*
 cache/http___*
 cache/web.archive.org_*
 cache/live_foreca_*.html
+
+# Large regenerable ML prediction frames (keep only summary CSVs)
+cache/ml_standalone_predictions.csv
+cache/ml_mos_predictions.csv
+cache/ml_vs_foreca_subset.csv
