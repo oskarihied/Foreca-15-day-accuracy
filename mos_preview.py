@@ -331,11 +331,13 @@ def save_predictions(
         })
 
     df_new = pd.DataFrame(rows)
+    df_new["run_date"]    = pd.to_datetime(df_new["run_date"])
+    df_new["target_date"] = pd.to_datetime(df_new["target_date"])
 
     if HISTORY_CSV.exists():
         existing = pd.read_csv(HISTORY_CSV, parse_dates=["run_date", "target_date"])
         # Remove any previous rows for today (idempotent re-runs)
-        existing = existing[pd.to_datetime(existing["run_date"]).dt.date != TODAY]
+        existing = existing[existing["run_date"].dt.date != TODAY]
         combined = pd.concat([existing, df_new], ignore_index=True)
     else:
         combined = df_new
