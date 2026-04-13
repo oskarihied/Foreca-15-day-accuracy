@@ -209,7 +209,7 @@ def forecast_to_rows(
             target = date(year, month, day)
         except ValueError:
             continue
-        if target < run_date:
+        if (run_date - target).days > 1:
             try:
                 target = date(year + 1, month, day)
             except ValueError:

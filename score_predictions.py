@@ -57,7 +57,7 @@ def _extend_observations(obs: pd.DataFrame) -> pd.DataFrame:
         "obs_tmin": daily["temperature_2m_min"],
         "obs_precip": daily["precipitation_sum"],
     })
-    bridge = bridge[bridge["date"] <= today]
+    bridge = bridge[bridge["date"] < today]
     return (
         pd.concat([obs, bridge], ignore_index=True)
         .drop_duplicates(subset=["date"])
@@ -157,6 +157,34 @@ def plot_scores(by_lead: pd.DataFrame, n_run_dates: int, out: Path) -> None:
     print(f"saved {out.name}")
 
 
+def print_detail_table(scored: pd.DataFrame) -> None:
+    """Print a per-row table: date, lead, Foreca / MOS / Clim / Observed."""
+    by_run = scored.groupby("run_date")
+    for run_date, grp in by_run:
+        grp = grp.sort_values("lead")
+        print(f"  Run date: {pd.Timestamp(run_date).date()}")
+        print(
+            f"  {'Lead':>4}  {'Date':>10}"
+            f"  {'FC Tx':>7}  {'MOS Tx':>7}  {'Clm Tx':>7}  {'Obs Tx':>7}"
+            f"  {'FC Tn':>7}  {'MOS Tn':>7}  {'Clm Tn':>7}  {'Obs Tn':>7}"
+            f"  {'FC mm':>7}  {'MOS mm':>7}  {'Clm mm':>7}  {'Obs mm':>7}"
+        )
+        print(
+            f"  {'----':>4}  {'----------':>10}"
+            f"  {'-------':>7}  {'-------':>7}  {'-------':>7}  {'-------':>7}"
+            f"  {'-------':>7}  {'-------':>7}  {'-------':>7}  {'-------':>7}"
+            f"  {'-------':>7}  {'-------':>7}  {'-------':>7}  {'-------':>7}"
+        )
+        for _, row in grp.iterrows():
+            print(
+                f"  {int(row['lead']):>4}  {pd.Timestamp(row['target_date']).strftime('%Y-%m-%d'):>10}"
+                f"  {row['foreca_tmax']:>+7.1f}  {row['mos_tmax']:>+7.1f}  {row['clim_tmax']:>+7.1f}  {row['obs_tmax']:>+7.1f}"
+                f"  {row['foreca_tmin']:>+7.1f}  {row['mos_tmin']:>+7.1f}  {row['clim_tmin']:>+7.1f}  {row['obs_tmin']:>+7.1f}"
+                f"  {row['foreca_precip']:>7.1f}  {row['mos_precip']:>7.1f}  {row['clim_precip']:>7.1f}  {row['obs_precip']:>7.1f}"
+            )
+        print()
+
+
 def main() -> None:
     scored = load_scored()
     n_run_dates = scored["run_date"].nunique()
@@ -166,6 +194,10 @@ def main() -> None:
     print(f"Scored {len(scored)} rows  "
           f"({n_run_dates} run date(s), {n_target} unique target dates: {date_range})")
     print()
+
+    print("=== Scored predictions ===")
+    print()
+    print_detail_table(scored)
 
     summary = overall_summary(scored)
     fmt = lambda x: f"{x:6.3f}"  # noqa: E731

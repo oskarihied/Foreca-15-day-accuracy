@@ -237,24 +237,21 @@ seconds.
 
 ## Live forecasting and scoring
 
-Three additional scripts extend the study into the present day:
+Two scripts extend the study into the present day:
 
-**`fetch_foreca_today.py`** — fetch today's Foreca forecast directly from
-`foreca.fi` and append to `cache/forecasts.csv`. Run at most once per day.
+**`mos_preview.py`** — fetches today's Foreca forecast directly from
+`foreca.fi`, computes the MOS correction, and shows the upcoming 15 days
+with Foreca / MOS / climatology side-by-side. Saves `graphs/mos_preview.png`
+and appends today's predictions to `cache/mos_preview_history.csv` for
+later scoring.
 
-**`mos_preview.py`** — show the upcoming 15 days with both the raw Foreca
-forecast and the MOS-corrected version side-by-side. Saves
-`graphs/mos_preview.png` and appends today's predictions to
-`cache/mos_preview_history.csv` for later scoring.
-
-**`score_predictions.py`** — once target dates have passed, join
+**`score_predictions.py`** — once target dates have passed, joins
 `cache/mos_preview_history.csv` with `cache/observations.csv` to compute
 who did better (Foreca, MOS, or climatology). Saves
 `graphs/score_predictions.png`.
 
 ```bash
 # Daily workflow
-python3 fetch_foreca_today.py
 python3 mos_preview.py
 
 # After enough target dates have passed
@@ -270,8 +267,7 @@ python3 ml_forecast.py
 
 - [foreca_15vrk.py](foreca_15vrk.py) — historical Foreca vs. climatology pipeline.
 - [ml_forecast.py](ml_forecast.py) — ML baseline (standalone + MOS evaluation).
-- [fetch_foreca_today.py](fetch_foreca_today.py) — fetch today's Foreca forecast.
-- [mos_preview.py](mos_preview.py) — upcoming 15-day Foreca + MOS preview.
+- [mos_preview.py](mos_preview.py) — fetch today's forecast, compute MOS, show 15-day preview.
 - [score_predictions.py](score_predictions.py) — score past MOS predictions against observations.
 - `cache/` — HTTP response cache plus generated CSV tables.
 - `graphs/` — all generated plots.

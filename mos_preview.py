@@ -1,13 +1,11 @@
 """
-Show the upcoming 15 days as predicted by Foreca and by our MOS
-post-processor side-by-side.
+Fetch today's Foreca forecast, compute the MOS correction, and show the
+upcoming 15 days with Foreca / MOS / climatology side-by-side.  Also saves
+today's predictions to cache/mos_preview_history.csv for later scoring.
 
 Requirements:
-  - fetch_foreca_today.py should have been run first so today's Foreca
-    forecast is in cache/forecasts.csv.  If it hasn't, this script tries
-    to fetch it automatically.
-  - cache/ must contain the historical data (run foreca_15vrk.py + then
-    ml_forecast.py at least once so the caches are populated).
+  cache/ must contain the historical data (run foreca_15vrk.py + then
+  ml_forecast.py at least once so the caches are populated).
 
 Usage:
     python3 mos_preview.py
@@ -85,7 +83,7 @@ def _ensure_today_forecast() -> None:
                 html = resp.read().decode("utf-8", errors="replace")
         except Exception as err:
             print(f"  ERROR: could not fetch {FORECA_URL}: {err}")
-            print("  Run fetch_foreca_today.py manually and retry.")
+            print("  Check your network connection and retry.")
             sys.exit(1)
         cache_file.write_text(html, encoding="utf-8")
     else:
@@ -485,14 +483,20 @@ def main() -> None:
     print()
     print(f"=== 15-day outlook for Helsinki — {TODAY} ===")
     print()
-    print(f"  {'Lead':>4}  {'Date':>10}  {'Foreca Tx':>10}  {'MOS Tx':>8}  {'Foreca Tn':>10}  {'MOS Tn':>8}  {'Foreca mm':>10}  {'MOS mm':>8}")
-    print(f"  {'----':>4}  {'----------':>10}  {'----------':>10}  {'--------':>8}  {'----------':>10}  {'--------':>8}  {'----------':>10}  {'--------':>8}")
+    print(f"  {'Lead':>4}  {'Date':>10}  {'Foreca Tx':>10}  {'MOS Tx':>8}  {'Clim Tx':>8}"
+          f"  {'Foreca Tn':>10}  {'MOS Tn':>8}  {'Clim Tn':>8}"
+          f"  {'Foreca mm':>10}  {'MOS mm':>8}  {'Clim mm':>8}")
+    print(f"  {'----':>4}  {'----------':>10}  {'----------':>10}  {'--------':>8}  {'-------':>8}"
+          f"  {'----------':>10}  {'--------':>8}  {'-------':>8}"
+          f"  {'----------':>10}  {'--------':>8}  {'-------':>8}")
     for i, (_, row) in enumerate(today_fc_df.iterrows()):
+        td = pd.Timestamp(row["target_date"])
+        cr = _clim_for_date(clim_ext, td)
         print(
-            f"  {row['lead']:>4}  {pd.Timestamp(row['target_date']).strftime('%Y-%m-%d'):>10}"
-            f"  {row['tmedmax']:>+10.1f}  {mos_preds['tmax'][i]:>+8.1f}"
-            f"  {row['tmedmin']:>+10.1f}  {mos_preds['tmin'][i]:>+8.1f}"
-            f"  {row['rd']:>10.1f}  {mos_preds['precip'][i]:>8.1f}"
+            f"  {row['lead']:>4}  {td.strftime('%Y-%m-%d'):>10}"
+            f"  {row['tmedmax']:>+10.1f}  {mos_preds['tmax'][i]:>+8.1f}  {cr.get('clim_tmax', float('nan')):>+8.1f}"
+            f"  {row['tmedmin']:>+10.1f}  {mos_preds['tmin'][i]:>+8.1f}  {cr.get('clim_tmin', float('nan')):>+8.1f}"
+            f"  {row['rd']:>10.1f}  {mos_preds['precip'][i]:>8.1f}  {cr.get('clim_precip', float('nan')):>8.1f}"
         )
 
 
